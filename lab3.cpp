@@ -147,3 +147,66 @@ public:
 
     ~SimpleThreadPool() { shutdown(false); }
 };
+
+void producer(int id, SimpleThreadPool &pool, bool &active)
+{
+    int task_id = 1;
+    while (active)
+    {
+        {
+            lock_guard<mutex> l(cout_mtx);
+            cout << "[Продюсер " << id << "] ЗГЕНЕРУВАВ задачу " << task_id << " і додає в пул.\n";
+        }
+
+        pool.addTask([id, task_id]()
+                     {
+            int exec_time = 4 + rand() % 12;
+            {
+                lock_guard<mutex> l(cout_mtx);
+                cout << "   -> [Пул] Задача " << task_id << " від Продюсера " << id << " ПОЧАЛА виконуватись (" << exec_time << "с).\n";
+            }
+
+            this_thread::sleep_for(seconds(exec_time));
+
+            {
+                lock_guard<mutex> l(cout_mtx);
+                cout << "   <- [Пул] Задача " << task_id << " від Продюсера " << id << " ЗАВЕРШЕНА.\n";
+            } });
+
+        task_id++;
+        this_thread::sleep_for(milliseconds(500));
+    }
+}
+
+int main()
+{
+    SetConsoleCP(1251);
+    SetConsoleOutputCP(1251);
+    srand(time(NULL));
+
+    cout << "--- Пул потоків запущено ---\n\n";
+    SimpleThreadPool pool;
+
+    vector<thread> producers;
+    bool testing_active = true;
+
+    for (int i = 1; i <= 3; ++i)
+    {
+        producers.push_back(thread(producer, i, ref(pool), ref(testing_active)));
+    }
+
+    this_thread::sleep_for(seconds(15));
+
+    testing_active = false;
+    for (auto &p : producers)
+    {
+        if (p.joinable())
+            p.join();
+    }
+
+    cout << "\n--- Генерацію зупинено. Пул доробляє задачі (Graceful Shutdown) ---\n";
+    pool.shutdown(true);
+    pool.printMetrics();
+
+    return 0;
+}
