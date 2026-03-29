@@ -87,6 +87,20 @@ public:
         }
     }
 
+    void addTask(function<void()> task)
+    {
+        int q_idx = rand() % 2;
+
+        {
+            lock_guard<mutex> lock(q[q_idx].mtx);
+            q[q_idx].tasks.push(task);
+
+            q[q_idx].queue_len_sum += q[q_idx].tasks.size();
+            q[q_idx].queue_samples++;
+        }
+        q[q_idx].cv.notify_one();
+    }
+
     void setPause(bool p)
     {
         pause_pool = p;
@@ -112,4 +126,24 @@ public:
             }
         }
     }
+
+    void printMetrics()
+    {
+        cout << "\n=== РЕЗУЛЬТАТИ ТЕСТУВАННЯ ===\n";
+        cout << "Всього створено потоків: 4\n\n";
+        for (int i = 0; i < 2; i++)
+        {
+            double avg_wait = q[i].wait_count ? q[i].total_wait_time / q[i].wait_count : 0;
+            double avg_exec = q[i].completed_tasks ? q[i].total_exec_time / q[i].completed_tasks : 0;
+            double avg_len = q[i].queue_samples ? (double)q[i].queue_len_sum / q[i].queue_samples : 0;
+
+            cout << "--- Черга " << i << " ---\n"
+                 << "  Сер. час очікування: " << avg_wait << " с\n"
+                 << "  Сер. довжина черги: " << avg_len << " задач\n"
+                 << "  Сер. час виконання: " << avg_exec << " с\n"
+                 << "  Виконано задач: " << q[i].completed_tasks << "\n\n";
+        }
+    }
+
+    ~SimpleThreadPool() { shutdown(false); }
 };
